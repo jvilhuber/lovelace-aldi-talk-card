@@ -4,13 +4,13 @@ A compact Lovelace card for [Aldi Talk](https://www.alditalk.de/) prepaid lines 
 It shows a gauge of the **remaining data percentage** (green / amber / red) plus a caption with
 **used / total GB**, the **renewal date**, and **days left** — derived from a single entity prefix.
 
-![one card per line](https://placehold.co/480x220?text=Aldi+Talk+Card)
-<!-- Replace the placeholder above with a real screenshot once you have one. -->
+![Aldi Talk Card](images/screenshot.png)
 
 ## Requirements
 
-- The [`aldi_talk`](https://github.com/) custom integration (or any integration that creates the
-  sensors below). For each line it must provide:
+- The [homeassistant-AldiTalk](https://github.com/JonasJoKuJonas/homeassistant-AldiTalk) custom
+  integration (HA domain `aldi_talk`), or any integration that creates the sensors below.
+  For each line it must provide:
   - `<base>_remaining_data_percentage`
   - `<base>_total_data_volume`
   - `<base>_remaining_data_volume`
