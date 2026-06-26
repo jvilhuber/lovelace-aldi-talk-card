@@ -39,17 +39,30 @@ built-in gauge card and does its own styling). In particular it does **not** req
 
 ```yaml
 type: custom:aldi-talk-card
-name: Jan
-base: sensor.jan
+name: Ursula
+entity: sensor.ursula_verbleibendes_datenvolumen_in_prozent
 ```
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `base` | yes | Entity prefix for the line (e.g. `sensor.jan`). The four sensors above are derived from it. |
-| `name` | no  | Label shown in the title. Defaults to `base` without its domain. |
+| `entity` | yes | The line's *"Remaining data percentage"* sensor. The other three sensors are found automatically on the same device. |
+| `name` | no  | Label shown in the title. Defaults to the line's name. |
 
 A **visual editor** is included: pick the line's *"Remaining data percentage"* sensor and the
-prefix is derived automatically.
+rest are resolved automatically.
+
+The card identifies the integration's sensors by their `platform` (`aldi_talk`) and
+`translation_key`, **not** by the entity ID. This matters because the integration localizes
+entity IDs to the Home Assistant language — e.g. German installs produce
+`sensor.<line>_verbleibendes_datenvolumen_in_prozent` rather than
+`sensor.<line>_remaining_data_percentage`. Matching on the stable keys keeps the card and its
+picker working in any language.
+
+### Legacy `base` option
+
+Older configs that set `base: sensor.<prefix>` still work. The card derives the four sensors by
+appending the English suffixes (`_remaining_data_percentage`, `_total_data_volume`,
+`_remaining_data_volume`, `_end_date`). This only matches English entity IDs; prefer `entity`.
 
 ## Notes
 
