@@ -66,9 +66,9 @@ appending the English suffixes (`_remaining_data_percentage`, `_total_data_volum
 
 ## Notes
 
-- The caption date is formatted `DD.MM.YYYY` and the labels are in English/German style
-  (`GB used`, `renews`, `Nd left`). Adjust in `aldi-talk-card.js` (`_captionText`) if you want a
-  different locale.
+- Labels follow the Home Assistant UI language (English and German are built in; English is the
+  fallback for any other language). The caption date is formatted by `Intl.DateTimeFormat` in that
+  language. To add a language or change wording, edit the `STRINGS` table in `aldi-talk-card.js`.
 - Gauge thresholds: green ≥ 50 %, amber 20–50 %, red < 20 % (`_gaugeConfig`).
 
 ## Credits

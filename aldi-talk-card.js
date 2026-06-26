@@ -16,7 +16,8 @@
  * sensors by appending the English suffixes. Only works for English entity_ids.
  *
  * Renders a gauge (remaining %) with green/amber/red severity bands plus a
- * caption ("X / Y GB used · renews DD.MM.YYYY · Nd left").
+ * caption ("X / Y GB used · renews <date> · N days left"), localized to the HA
+ * UI language (see STRINGS).
  *
  * Self-contained: no HACS card dependencies. The caption is drawn by injecting
  * a small scoped stylesheet into the built-in gauge card's shadow root and
@@ -35,6 +36,25 @@ const TK = {
   total: "total_data_volume",
   remaining: "remaining_data_volume",
   end: "end_date",
+};
+
+// Display strings per UI language. Placeholders: {name} {used} {total} {date}
+// {days}. English is the fallback for any language not listed. The date itself
+// is formatted by Intl using the same language, so only the surrounding words
+// live here.
+const STRINGS = {
+  en: {
+    remaining: "{name} – Data Remaining",
+    used: "{used} / {total} GB used",
+    renews: "renews {date}",
+    daysLeft: "{days}d left",
+  },
+  de: {
+    remaining: "{name} – Verbleibende Daten",
+    used: "{used} / {total} GB verbraucht",
+    renews: "verlängert {date}",
+    daysLeft: "noch {days} Tage",
+  },
 };
 
 class AldiTalkCard extends HTMLElement {
@@ -118,13 +138,30 @@ class AldiTalkCard extends HTMLElement {
     return pctId ? pctId.replace(/^[a-z_]+\./, "") : "Aldi Talk";
   }
 
+  // Base language tag of the HA UI ("de-CH" -> "de"), English when unknown.
+  _lang() {
+    const full = (this._hass && this._hass.language) || "en";
+    return full.split("-")[0];
+  }
+
+  // Look up a display string for the current language (English fallback) and
+  // substitute {placeholders} from `vars`.
+  _t(key, vars) {
+    const lang = this._lang();
+    const table = STRINGS[lang] || STRINGS.en;
+    const template = table[key] || STRINGS.en[key] || "";
+    return template.replace(/\{(\w+)\}/g, (m, k) =>
+      Object.prototype.hasOwnProperty.call(vars || {}, k) ? vars[k] : m
+    );
+  }
+
   _gaugeConfig(cfg) {
     const ids = this._resolveEntities(cfg);
     const name = this._defaultName(cfg, ids);
     return {
       type: "gauge",
       entity: ids[TK.pct],
-      name: `${name} – Data Remaining`,
+      name: this._t("remaining", { name }),
       min: 0,
       max: 100,
       needle: false,
@@ -132,8 +169,9 @@ class AldiTalkCard extends HTMLElement {
     };
   }
 
-  // Caption is computed client-side (this is what the Jinja template used to do
-  // server-side). Kept locale-explicit so "%d.%m.%Y" zero-padding is preserved.
+  // Caption is computed client-side, localized to the HA UI language. The date
+  // is formatted by Intl in that language; the surrounding words come from
+  // STRINGS via _t().
   _captionText(cfg) {
     const states = this._hass && this._hass.states;
     if (!states) return "";
@@ -148,16 +186,24 @@ class AldiTalkCard extends HTMLElement {
     const endEntity = ids[TK.end] ? states[ids[TK.end]] : null;
     const parts = [];
     if (total != null && rem != null) {
-      parts.push(`${(total - rem).toFixed(1)} / ${Math.round(total)} GB used`);
+      parts.push(
+        this._t("used", {
+          used: (total - rem).toFixed(1),
+          total: Math.round(total),
+        })
+      );
     }
     if (endEntity && endEntity.state) {
       const d = new Date(endEntity.state);
       if (!Number.isNaN(d.getTime())) {
-        const pad = (n) => String(n).padStart(2, "0");
-        const ds = `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
+        const date = new Intl.DateTimeFormat(this._hass.language || "en", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(d);
         const days = Math.round((d.getTime() - Date.now()) / 86400000);
-        parts.push(`renews ${ds}`);
-        parts.push(`${days}d left`);
+        parts.push(this._t("renews", { date }));
+        parts.push(this._t("daysLeft", { days }));
       }
     }
     return parts.join(" · ");
