@@ -189,7 +189,7 @@ class AldiTalkCard extends HTMLElement {
       parts.push(
         this._t("used", {
           used: (total - rem).toFixed(1),
-          total: Math.round(total),
+          total: total.toFixed(1),
         })
       );
     }
