@@ -43,13 +43,23 @@ name: Ursula
 entity: sensor.ursula_verbleibendes_datenvolumen_in_prozent
 ```
 
-| Option | Required | Description |
-|--------|----------|-------------|
-| `entity` | yes | The line's *"Remaining data percentage"* sensor. The other three sensors are found automatically on the same device. |
-| `name` | no  | Label shown in the title. Defaults to the line's name. |
+Pick the line's **"Remaining data percentage"** sensor; the other three sensors (total, remaining,
+end-date) are found automatically from the same device — language-independently, so it works
+regardless of the entity-id locale.
 
-A **visual editor** is included: pick the line's *"Remaining data percentage"* sensor and the
-rest are resolved automatically.
+| Option | Required | Default | Description |
+|--------|----------|---------|-------------|
+| `entity` | yes | — | The line's *"Remaining data percentage"* sensor. |
+| `name` | no | line's name | Label shown in the title. |
+| `show_title` | no | `true` | Show the *"{name} – Data Remaining"* title line. Set `false` to hide it. |
+| `show_used` | no | `true` | Show the *"X / Y GB used"* caption part. |
+| `show_renews` | no | `true` | Show the *"renews &lt;date&gt;"* caption part. |
+| `show_days` | no | `true` | Show the *"N days left"* caption part. |
+| `severity` | no | `{green: 50, yellow: 20}` | Gauge color thresholds for the remaining %. `green` ≥ green, amber between, red below `yellow`. |
+
+A **visual editor** is included: pick the line's *"Remaining data percentage"* sensor, toggle the
+title and each caption part, and set the two color thresholds. Defaults are kept out of the stored
+config, so an unmodified card stays a two-line `type` + `entity`.
 
 The card identifies the integration's sensors by their `platform` (`aldi_talk`) and
 `translation_key`, **not** by the entity ID. This matters because the integration localizes
@@ -57,6 +67,18 @@ entity IDs to the Home Assistant language — e.g. German installs produce
 `sensor.<line>_verbleibendes_datenvolumen_in_prozent` rather than
 `sensor.<line>_remaining_data_percentage`. Matching on the stable keys keeps the card and its
 picker working in any language.
+
+### Example — minimal caption, custom colors
+
+```yaml
+type: custom:aldi-talk-card
+entity: sensor.jan_remaining_data_percentage
+show_title: false      # no title, just the gauge
+show_renews: false     # caption shows only "X / Y GB used · N days left"
+severity:
+  green: 60            # green ≥ 60 %, amber 30–60 %, red < 30 %
+  yellow: 30
+```
 
 ### Legacy `base` option
 
@@ -69,7 +91,8 @@ appending the English suffixes (`_remaining_data_percentage`, `_total_data_volum
 - Labels follow the Home Assistant UI language (English and German are built in; English is the
   fallback for any other language). The caption date is formatted by `Intl.DateTimeFormat` in that
   language. To add a language or change wording, edit the `STRINGS` table in `aldi-talk-card.js`.
-- Gauge thresholds: green ≥ 50 %, amber 20–50 %, red < 20 % (`_gaugeConfig`).
+- Default gauge thresholds: green ≥ 50 %, amber 20–50 %, red < 20 % — override per-card with
+  `severity` (`_gaugeConfig`).
 
 ## Credits
 
