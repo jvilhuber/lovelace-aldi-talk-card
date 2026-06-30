@@ -1,0 +1,8 @@
+{
+  "name": "lovelace-aldi-talk-card",
+  "private": true,
+  "description": "Aldi Talk data gauge card for Home Assistant",
+  "scripts": {
+    "test": "node test/aldi-talk-card.test.js"
+  }
+}

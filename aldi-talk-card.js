@@ -7,6 +7,15 @@
  *   name: <label>            # optional label shown as the title
  *   entity: sensor.<line>_…  # the line's "remaining data percentage" sensor
  *
+ * Optional appearance keys (all have sensible defaults):
+ *   show_title: false        # hide the "{name} – Data Remaining" line
+ *   show_used: false         # hide the "X / Y GB used" caption part
+ *   show_renews: false       # hide the "renews <date>" caption part
+ *   show_days: false         # hide the "N days left" caption part
+ *   severity:                # gauge color thresholds for the remaining %
+ *     green: 50              #   green ≥ 50 (default)
+ *     yellow: 20             #   amber 20–50, red < 20 (defaults)
+ *
  * From `entity` the card finds the other three sensors (total, remaining,
  * end_date) by looking up the aldi_talk sensors on the same device via their
  * translation_key. This is language-independent: the integration localizes the
@@ -155,18 +164,33 @@ class AldiTalkCard extends HTMLElement {
     );
   }
 
+  // Gauge color thresholds for the remaining %. Defaults: green ≥ 50, amber
+  // 20–50, red < 20. Users may override green/yellow via `severity:`; the red
+  // band always starts at 0 (it is the lowest band the gauge can show).
+  _severity(cfg) {
+    const s = (cfg && cfg.severity) || {};
+    const green = Number.isFinite(s.green) ? s.green : 50;
+    const yellow = Number.isFinite(s.yellow) ? s.yellow : 20;
+    return { green, yellow, red: 0 };
+  }
+
   _gaugeConfig(cfg) {
     const ids = this._resolveEntities(cfg);
     const name = this._defaultName(cfg, ids);
-    return {
+    const g = {
       type: "gauge",
       entity: ids[TK.pct],
-      name: this._t("remaining", { name }),
       min: 0,
       max: 100,
       needle: false,
-      severity: { green: 50, yellow: 20, red: 0 },
+      severity: this._severity(cfg),
     };
+    // `show_title: false` drops the "{name} – Data Remaining" line. An empty
+    // name (not an omitted one) is required: the gauge card falls back to the
+    // entity's friendly name when `name` is absent. `_decorate` also hides the
+    // name element via CSS, since some gauge versions fall back even on "".
+    g.name = cfg.show_title !== false ? this._t("remaining", { name }) : "";
+    return g;
   }
 
   // Caption is computed client-side, localized to the HA UI language. The date
@@ -184,8 +208,9 @@ class AldiTalkCard extends HTMLElement {
     const total = num(ids[TK.total]);
     const rem = num(ids[TK.remaining]);
     const endEntity = ids[TK.end] ? states[ids[TK.end]] : null;
+    // Each caption part is opt-out via `show_*: false`; all shown by default.
     const parts = [];
-    if (total != null && rem != null) {
+    if (cfg.show_used !== false && total != null && rem != null) {
       parts.push(
         this._t("used", {
           used: (total - rem).toFixed(1),
@@ -193,17 +218,27 @@ class AldiTalkCard extends HTMLElement {
         })
       );
     }
-    if (endEntity && endEntity.state) {
+    // Renewal date and days-left both come from the end-date sensor; only parse
+    // it when at least one of them is enabled.
+    if (
+      (cfg.show_renews !== false || cfg.show_days !== false) &&
+      endEntity &&
+      endEntity.state
+    ) {
       const d = new Date(endEntity.state);
       if (!Number.isNaN(d.getTime())) {
-        const date = new Intl.DateTimeFormat(this._hass.language || "en", {
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-        }).format(d);
-        const days = Math.round((d.getTime() - Date.now()) / 86400000);
-        parts.push(this._t("renews", { date }));
-        parts.push(this._t("daysLeft", { days }));
+        if (cfg.show_renews !== false) {
+          const date = new Intl.DateTimeFormat(this._hass.language || "en", {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+          }).format(d);
+          parts.push(this._t("renews", { date }));
+        }
+        if (cfg.show_days !== false) {
+          const days = Math.round((d.getTime() - Date.now()) / 86400000);
+          parts.push(this._t("daysLeft", { days }));
+        }
       }
     }
     return parts.join(" · ");
@@ -256,7 +291,10 @@ class AldiTalkCard extends HTMLElement {
       "ha-card { overflow: visible; padding-bottom: 8px; }" +
       " ha-card::after { content: attr(data-aldi-caption); display: block;" +
       " text-align: center; font-size: 12px; font-weight: 400; opacity: 0.7;" +
-      " padding: 0 8px 10px; white-space: normal; }";
+      " padding: 0 8px 10px; white-space: normal; }" +
+      // With show_title off, also hide the gauge's own name element — some gauge
+      // versions still render the entity's friendly name on an empty `name`.
+      (this._config.show_title === false ? " ha-card .name { display: none; }" : "");
     try {
       const sheet = new CSSStyleSheet();
       sheet.replaceSync(css);
@@ -313,7 +351,19 @@ class AldiTalkCardEditor extends HTMLElement {
     // Legacy `base` configs map back onto the picker as the percentage sensor.
     const entity =
       config.entity || (config.base ? `${config.base}_remaining_data_percentage` : undefined);
-    this._form.data = { name: config.name || "", entity };
+    const sev = config.severity || {};
+    // Booleans default to true (shown) so the toggles render "on" for a config
+    // that has not opted out. Thresholds fall back to the card's own defaults.
+    this._form.data = {
+      name: config.name || "",
+      entity,
+      show_title: config.show_title !== false,
+      show_used: config.show_used !== false,
+      show_renews: config.show_renews !== false,
+      show_days: config.show_days !== false,
+      green: Number.isFinite(sev.green) ? sev.green : 50,
+      yellow: Number.isFinite(sev.yellow) ? sev.yellow : 20,
+    };
   }
 
   set hass(hass) {
@@ -328,31 +378,83 @@ class AldiTalkCardEditor extends HTMLElement {
     const sig = include.join(",");
     if (sig !== this._includeSig) {
       this._includeSig = sig;
-      this._form.schema = [
-        { name: "name", selector: { text: {} } },
-        {
-          name: "entity",
-          required: true,
-          selector: { entity: { include_entities: include } },
-        },
-      ];
+      this._form.schema = this._schema(include);
     }
+  }
+
+  // Full editor schema. `include` restricts the line picker to the percentage
+  // sensors; pass [] before hass arrives. The caption toggles and color
+  // thresholds are static and live in the two expandable sections.
+  _schema(include) {
+    return [
+      { name: "name", selector: { text: {} } },
+      {
+        name: "entity",
+        required: true,
+        selector: { entity: { include_entities: include } },
+      },
+      { name: "show_title", selector: { boolean: {} } },
+      {
+        type: "expandable",
+        name: "",
+        title: "Caption",
+        schema: [
+          { name: "show_used", selector: { boolean: {} } },
+          { name: "show_renews", selector: { boolean: {} } },
+          { name: "show_days", selector: { boolean: {} } },
+        ],
+      },
+      {
+        type: "expandable",
+        name: "",
+        title: "Gauge colors",
+        schema: [
+          {
+            type: "grid",
+            name: "",
+            schema: [
+              {
+                name: "green",
+                selector: {
+                  number: { min: 0, max: 100, mode: "box", unit_of_measurement: "%" },
+                },
+              },
+              {
+                name: "yellow",
+                selector: {
+                  number: { min: 0, max: 100, mode: "box", unit_of_measurement: "%" },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ];
   }
 
   _ensureForm() {
     if (this._form) return;
     this._form = document.createElement("ha-form");
     // Initial schema (empty picker) until hass arrives and we can list sensors.
-    this._form.schema = [
-      { name: "name", selector: { text: {} } },
-      { name: "entity", required: true, selector: { entity: { include_entities: [] } } },
-    ];
+    this._form.schema = this._schema([]);
     this._form.computeLabel = (s) =>
-      ({ name: "Name (label)", entity: "Aldi Talk line" }[s.name] || s.name);
+      ({
+        name: "Name (label)",
+        entity: "Aldi Talk line",
+        show_title: "Show title",
+        show_used: "Show data used",
+        show_renews: "Show renewal date",
+        show_days: "Show days left",
+        green: "Green from",
+        yellow: "Amber from",
+      }[s.name] || s.name);
     this._form.computeHelper = (s) =>
-      s.name === "entity"
-        ? "Pick the line's “Remaining data percentage” sensor — total, remaining and end-date are derived from it."
-        : "";
+      ({
+        entity:
+          "Pick the line's “Remaining data percentage” sensor — total, remaining and end-date are derived from it.",
+        green: "Gauge is green at or above this remaining %.",
+        yellow: "Gauge is amber down to this %, and red below it.",
+      }[s.name] || "");
     this._form.addEventListener("value-changed", (ev) => this._valueChanged(ev));
     this.appendChild(this._form);
   }
@@ -368,6 +470,28 @@ class AldiTalkCardEditor extends HTMLElement {
       newConfig.entity = value.entity;
       // A fresh pick supersedes any legacy prefix config.
       delete newConfig.base;
+    }
+
+    // Toggles default to true (shown), so only persist the explicit "off" and
+    // keep the stored config minimal otherwise.
+    for (const key of ["show_title", "show_used", "show_renews", "show_days"]) {
+      if (value[key] === false) newConfig[key] = false;
+      else delete newConfig[key];
+    }
+
+    // Persist `severity` only when a threshold differs from the defaults
+    // (green 50 / amber 20); otherwise drop it so default configs stay clean.
+    const green = Number(value.green);
+    const yellow = Number(value.yellow);
+    const greenSet = Number.isFinite(green) && green !== 50;
+    const yellowSet = Number.isFinite(yellow) && yellow !== 20;
+    if (greenSet || yellowSet) {
+      newConfig.severity = {
+        green: Number.isFinite(green) ? green : 50,
+        yellow: Number.isFinite(yellow) ? yellow : 20,
+      };
+    } else {
+      delete newConfig.severity;
     }
 
     this.dispatchEvent(
