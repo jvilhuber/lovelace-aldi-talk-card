@@ -67,7 +67,7 @@ const E = "sensor.jan_remaining_data_percentage";
 // 2. show_title: false -> gauge has no name
 {
   const g = card()._gaugeConfig({ entity: E, show_title: false });
-  check("title hidden", g.name === undefined, g.name);
+  check("title hidden (empty name, not friendly-name fallback)", g.name === "", g.name);
 }
 
 // 3. Custom severity thresholds

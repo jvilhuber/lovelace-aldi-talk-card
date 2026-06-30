@@ -185,9 +185,11 @@ class AldiTalkCard extends HTMLElement {
       needle: false,
       severity: this._severity(cfg),
     };
-    // `show_title: false` drops the "{name} – Data Remaining" line entirely;
-    // the gauge renders titleless. Defaults to shown.
-    if (cfg.show_title !== false) g.name = this._t("remaining", { name });
+    // `show_title: false` drops the "{name} – Data Remaining" line. An empty
+    // name (not an omitted one) is required: the gauge card falls back to the
+    // entity's friendly name when `name` is absent. `_decorate` also hides the
+    // name element via CSS, since some gauge versions fall back even on "".
+    g.name = cfg.show_title !== false ? this._t("remaining", { name }) : "";
     return g;
   }
 
@@ -289,7 +291,10 @@ class AldiTalkCard extends HTMLElement {
       "ha-card { overflow: visible; padding-bottom: 8px; }" +
       " ha-card::after { content: attr(data-aldi-caption); display: block;" +
       " text-align: center; font-size: 12px; font-weight: 400; opacity: 0.7;" +
-      " padding: 0 8px 10px; white-space: normal; }";
+      " padding: 0 8px 10px; white-space: normal; }" +
+      // With show_title off, also hide the gauge's own name element — some gauge
+      // versions still render the entity's friendly name on an empty `name`.
+      (this._config.show_title === false ? " ha-card .name { display: none; }" : "");
     try {
       const sheet = new CSSStyleSheet();
       sheet.replaceSync(css);
